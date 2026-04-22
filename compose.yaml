@@ -1,0 +1,58 @@
+﻿version: '3.8'
+
+services:
+  manager:
+    build:
+      context: .
+      dockerfile: Manager/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - WorkerUrls=http://worker1:8080,http://worker2:8080,http://worker3:8080
+    volumes:
+      - ./Manager/data:/app/data
+    networks:
+      - crackhash-net
+    depends_on:
+      - worker1
+      - worker2
+      - worker3
+    restart: unless-stopped
+
+  worker1:
+    build:
+      context: .
+      dockerfile: Worker/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - ManagerUrl=http://manager:8080
+    networks:
+      - crackhash-net
+    restart: unless-stopped
+
+  worker2:
+    build:
+      context: .
+      dockerfile: Worker/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - ManagerUrl=http://manager:8080
+    networks:
+      - crackhash-net
+    restart: unless-stopped
+
+  worker3:
+    build:
+      context: .
+      dockerfile: Worker/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - ManagerUrl=http://manager:8080
+    networks:
+      - crackhash-net
+    restart: unless-stopped
+
+networks:
+  crackhash-net:
+    driver: bridge

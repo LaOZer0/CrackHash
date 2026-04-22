@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrackHash", "CrackHash.csproj", "{4B69600E-4D2F-46D0-8BBF-EFB9A5D741C1}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{80A05A3B-8CDD-41A6-BDDA-28A99B500861}"
 	ProjectSection(SolutionItems) = preProject
 		compose.yaml = compose.yaml
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Manager", "Manager\Manager.csproj", "{C10EB04F-2634-47AD-B78D-6EE15D97BB0B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Worker", "Worker\Worker.csproj", "{E42D4351-D110-436A-AFAE-7203D52F0038}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,9 +15,13 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{4B69600E-4D2F-46D0-8BBF-EFB9A5D741C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4B69600E-4D2F-46D0-8BBF-EFB9A5D741C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4B69600E-4D2F-46D0-8BBF-EFB9A5D741C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4B69600E-4D2F-46D0-8BBF-EFB9A5D741C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C10EB04F-2634-47AD-B78D-6EE15D97BB0B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C10EB04F-2634-47AD-B78D-6EE15D97BB0B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C10EB04F-2634-47AD-B78D-6EE15D97BB0B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C10EB04F-2634-47AD-B78D-6EE15D97BB0B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E42D4351-D110-436A-AFAE-7203D52F0038}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E42D4351-D110-436A-AFAE-7203D52F0038}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E42D4351-D110-436A-AFAE-7203D52F0038}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E42D4351-D110-436A-AFAE-7203D52F0038}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

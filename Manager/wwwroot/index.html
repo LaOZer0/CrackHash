@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrackHash UI</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background: #f8f9fa;
+        }
+        h1 { color: #2c3e50; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.3rem; font-weight: 500; }
+        input {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.7rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover { background: #2980b9; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th { background: #ecf0f1; }
+        .status-QUEUED { color: #f39c12; font-weight: bold; }
+        .status-IN_PROGRESS { color: #3498db; font-weight: bold; }
+        .status-READY { color: #27ae60; font-weight: bold; }
+        .status-ERROR { color: #e74c3c; font-weight: bold; }
+        .progress-bar {
+            width: 100%;
+            background: #eee;
+            border-radius: 4px;
+            height: 8px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            transition: width 0.3s;
+        }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔓 CrackHash Distributed System</h1>
+
+    <div class="form-group">
+        <label for="hash">MD5 Hash</label>
+        <input type="text" id="hash" placeholder="e2fc714c4727ee9395f324cd2e7f331f" value="e2fc714c4727ee9395f324cd2e7f331f">
+    </div>
+
+    <div class="form-group">
+        <label for="maxLength">Max Length</label>
+        <input type="number" id="maxLength" value="4" min="1" max="6">
+    </div>
+
+    <button onclick="startCrack()">Start Crack</button>
+
+    <h2>📋 Task Queue</h2>
+    <table id="taskTable">
+        <thead>
+        <tr>
+            <th>Request ID</th>
+            <th>Hash</th>
+            <th>Status</th>
+            <th>Progress</th>
+            <th>ETA</th>
+            <th>Result</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+    const tasks = new Map();
+
+    async function startCrack() {
+        const hash = document.getElementById('hash').value.trim();
+        const maxLength = document.getElementById('maxLength').value;
+        if (!hash) return alert('Enter hash!');
+
+        try {
+            const res = await fetch('/api/hash/crack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hash, maxLength: parseInt(maxLength) })
+            });
+            const data = await res.json();
+            addTaskRow(data.requestId, hash);
+            await pollStatus(data.requestId);
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+
+    function addTaskRow(id, hash) {
+        const tbody = document.querySelector('#taskTable tbody');
+        const tr = document.createElement('tr');
+        tr.id = `row-${id}`;
+        tr.innerHTML = `
+            <td><small>${id.substring(0, 8)}...</small></td>
+            <td><small>${hash.substring(0, 8)}...</small></td>
+            <td class="status-QUEUED">QUEUED</td>
+            <td><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div></td>
+            <td>--</td>
+            <td>--</td>
+        `;
+        tbody.prepend(tr);
+        tasks.set(id, { row: tr });
+    }
+
+    async function pollStatus(id) {
+        if (!tasks.has(id)) return;
+        try {
+            const res = await fetch(`/api/hash/status?requestId=${id}`);
+            const data = await res.json();
+            updateRow(id, data);
+
+            // Продолжаем опрос только если задача ещё не завершена
+            if (data.status === 'IN_PROGRESS' || data.status === 'QUEUED') {
+                setTimeout(() => pollStatus(id), 1000);
+            }
+        } catch (e) {
+            console.error(e);
+            setTimeout(() => pollStatus(id), 2000);
+        }
+    }
+
+    function updateRow(id, data) {
+        const { row } = tasks.get(id);
+        if (!row) return;
+
+        const statusCell = row.cells[2];
+        statusCell.textContent = data.status;
+        statusCell.className = `status-${data.status}`;
+
+        const progressFill = row.cells[3].querySelector('.progress-fill');
+        progressFill.style.width = `${data.progress || 0}%`;
+
+        row.cells[4].textContent = data.estimatedTimeRemaining || '--';
+
+        if (data.status === 'READY') {
+            row.cells[5].textContent = data.data?.length > 0 ? data.data.join(', ') : 'Not found';
+            row.cells[5].style.color = data.data?.length > 0 ? '#27ae60' : '#e67e22';
+        }
+    }
+</script>
+</body>
+</html>
