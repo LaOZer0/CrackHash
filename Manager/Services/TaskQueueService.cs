@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Manager.Models;
+using Manager.Options;
+using Microsoft.Extensions.Options;
 using TaskStatus = Manager.Models.TaskStatus;
 
 namespace Manager.Services;
@@ -13,6 +15,7 @@ public class TaskQueueService : IHostedService, ITaskQueueService, IDisposable
     private readonly IRequestTracker _tracker;
     private readonly IStatePersistence _persistence;
     private readonly ILogger<TaskQueueService> _logger;
+    private readonly ManagerOptions _options;
     
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _taskCompletions = new();
     private CancellationTokenSource _stoppingCts = new();
@@ -23,13 +26,15 @@ public class TaskQueueService : IHostedService, ITaskQueueService, IDisposable
         ITaskDistributor distributor,
         IRequestTracker tracker,
         IStatePersistence persistence,
-        ILogger<TaskQueueService> logger)
+        ILogger<TaskQueueService> logger,
+        IOptions<ManagerOptions> options)
     {
         _healthService = healthService;
         _distributor = distributor;
         _tracker = tracker;
         _persistence = persistence;
         _logger = logger;
+        _options = options.Value;
     }
 
     // Метод интерфейса ITaskQueueService
@@ -82,7 +87,7 @@ public class TaskQueueService : IHostedService, ITaskQueueService, IDisposable
                 var aliveWorkers = await _healthService.GetAliveWorkersAsync();
                 if (!aliveWorkers.Any()) throw new InvalidOperationException("No alive workers available");
 
-                var alphabet = "abcdefghijklmnopqrstuvwxyz0123456789".ToCharArray();
+                var alphabet = _options.Alphabet.ToCharArray();
                 _tracker.Update(task.RequestId, s => s.AssignedWorkerCount = aliveWorkers.Count);
                 _ = _persistence.SaveStateAsync(_tracker.GetAllStates());
                 
@@ -92,7 +97,7 @@ public class TaskQueueService : IHostedService, ITaskQueueService, IDisposable
                 _taskCompletions[task.RequestId] = tcs;
                 
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-                timeoutCts.CancelAfter(TimeSpan.FromMinutes(10));
+                timeoutCts.CancelAfter(TimeSpan.FromMinutes(_options.TaskTimeoutMinutes));
                 
                 try
                 {

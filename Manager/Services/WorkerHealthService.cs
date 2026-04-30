@@ -1,3 +1,6 @@
+using Manager.Options;
+using Microsoft.Extensions.Options;
+
 namespace Manager.Services;
 
 public class WorkerHealthService : IWorkerHealthService
@@ -5,24 +8,27 @@ public class WorkerHealthService : IWorkerHealthService
     private readonly IConfiguration _config;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WorkerHealthService> _logger;
+    private readonly ManagerOptions _options;
 
     public WorkerHealthService(
         IConfiguration config, 
         IHttpClientFactory httpClientFactory,
-        ILogger<WorkerHealthService> logger)
+        ILogger<WorkerHealthService> logger,
+        IOptions<ManagerOptions> options)
     {
         _config = config;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _options = options.Value;
     }
 
     public async Task<List<string>> GetAliveWorkersAsync()
     {
-        var workerUrls = (_config["WorkerUrls"] ?? "http://worker:8080").Split(',');
+        var workerUrls = _options.WorkerUrls.Split(','); 
         var alive = new List<string>();
 
         using var client = _httpClientFactory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(2);
+        client.Timeout = TimeSpan.FromSeconds(_options.HealthCheckTimeoutSeconds);
 
         var tasks = workerUrls.Select(async url =>
         {

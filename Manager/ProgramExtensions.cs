@@ -1,3 +1,4 @@
+using Manager.Options;
 using Manager.Services;
 
 namespace Manager;
@@ -8,6 +9,9 @@ public static class ProgramExtensions
     {
         builder.Services.AddControllers();
         builder.Services.AddHttpClient();
+        
+        builder.Services.Configure<ManagerOptions>(
+            builder.Configuration.GetSection("ManagerOptions"));
         
         builder.Services.AddSingleton<IRequestTracker, RequestTracker>();
         builder.Services.AddSingleton<IStatePersistence, StatePersistenceService>();
