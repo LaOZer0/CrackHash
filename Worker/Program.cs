@@ -1,16 +1,11 @@
-using Worker.Services;
+namespace Worker;
 
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddControllers();
-builder.Services.AddHttpClient();
-
-builder.Services.AddScoped<IHashCracker, HashCracker>();
-builder.Services.AddScoped<IManagerClient, ManagerClient>();
-
-var app = builder.Build();
-
-app.MapControllers();
-
-Console.WriteLine("Worker started. Press Ctrl+C to stop.");
-app.Run();
+public static class Program
+{
+    public static async Task Main(string[] args) =>
+        await WebApplication.CreateBuilder(args)
+            .ConfigureServices()
+            .Build()
+            .ConfigurePipeline()
+            .RunAsync();
+}

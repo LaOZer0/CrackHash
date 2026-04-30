@@ -1,174 +1,254 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CrackHash UI</title>
     <style>
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: Arial, sans-serif;
             max-width: 900px;
-            margin: 2rem auto;
-            padding: 0 1rem;
-            background: #f8f9fa;
+            margin: 24px auto;
+            padding: 0 12px;
         }
-        h1 { color: #2c3e50; }
-        .form-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.3rem; font-weight: 500; }
-        input {
-            width: 100%;
-            padding: 0.6rem;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 0.7rem 1.5rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-        }
-        button:hover { background: #2980b9; }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 1.5rem;
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        th, td {
-            padding: 0.8rem;
-            text-align: left;
-            border-bottom: 1px solid #eee;
+
+        td {
+            border: 1px solid #9aa5b1;
+            padding: 10px;
+            vertical-align: middle;
         }
-        th { background: #ecf0f1; }
-        .status-QUEUED { color: #f39c12; font-weight: bold; }
-        .status-IN_PROGRESS { color: #3498db; font-weight: bold; }
-        .status-READY { color: #27ae60; font-weight: bold; }
-        .status-ERROR { color: #e74c3c; font-weight: bold; }
-        .progress-bar {
+
+        input {
             width: 100%;
-            background: #eee;
-            border-radius: 4px;
-            height: 8px;
-            overflow: hidden;
+            box-sizing: border-box;
+            padding: 8px;
+            font-size: 16px;
         }
-        .progress-fill {
-            height: 100%;
-            background: #3498db;
-            transition: width 0.3s;
+
+        button {
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
         }
-        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        .section-title {
+            font-size: 30px;
+            font-weight: 700;
+            margin: 0 0 16px;
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <h1>🔓 CrackHash Distributed System</h1>
+<h1 class="section-title">CrackHash</h1>
 
-    <div class="form-group">
-        <label for="hash">MD5 Hash</label>
-        <input type="text" id="hash" placeholder="e2fc714c4727ee9395f324cd2e7f331f" value="e2fc714c4727ee9395f324cd2e7f331f">
-    </div>
-
-    <div class="form-group">
-        <label for="maxLength">Max Length</label>
-        <input type="number" id="maxLength" value="4" min="1" max="6">
-    </div>
-
-    <button onclick="startCrack()">Start Crack</button>
-
-    <h2>📋 Task Queue</h2>
-    <table id="taskTable">
-        <thead>
-        <tr>
-            <th>Request ID</th>
-            <th>Hash</th>
-            <th>Status</th>
-            <th>Progress</th>
-            <th>ETA</th>
-            <th>Result</th>
-        </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-</div>
+<table>
+    <tr>
+        <td>Введите пароль для хэширования</td>
+        <td><input id="passwordInput" type="text" placeholder="Пароль"></td>
+        <td></td>
+        <td><button id="hashButton" type="button">Отправить</button></td>
+    </tr>
+    <tr>
+        <td>Статус</td>
+        <td id="hashStatus" colspan="3">-</td>
+    </tr>
+    <tr>
+        <td>Хэш для взлома</td>
+        <td><input id="hashInput" type="text" placeholder="Хэш"></td>
+        <td><input id="maxLengthInput" type="number" min="1" placeholder="Длина"></td>
+        <td><button id="startButton" type="button">Отправить</button></td>
+    </tr>
+    <tr>
+        <td>Статус</td>
+        <td id="startStatus" colspan="3">-</td>
+    </tr>
+    <tr>
+        <td>Результат взлома</td>
+        <td><input id="requestIdInput" type="text" placeholder="id"></td>
+        <td></td>
+        <td><button id="statusButton" type="button">Отправить</button></td>
+    </tr>
+    <tr>
+        <td>Статус</td>
+        <td id="resultStatus" colspan="3">-</td>
+    </tr>
+</table>
 
 <script>
-    const tasks = new Map();
+    const passwordInput = document.getElementById("passwordInput");
+    const hashButton = document.getElementById("hashButton");
+    const hashStatus = document.getElementById("hashStatus");
+    const hashInput = document.getElementById("hashInput");
+    const maxLengthInput = document.getElementById("maxLengthInput");
+    const startButton = document.getElementById("startButton");
+    const startStatus = document.getElementById("startStatus");
+    const requestIdInput = document.getElementById("requestIdInput");
+    const statusButton = document.getElementById("statusButton");
+    const resultStatus = document.getElementById("resultStatus");
+
+    function md5(input) {
+        function rotateLeft(value, shift) {
+            return (value << shift) | (value >>> (32 - shift));
+        }
+
+        function toWordArray(str) {
+            const utf8 = new TextEncoder().encode(str);
+            const length = utf8.length;
+            const numberOfWordsTemp = ((length + 8) >>> 6 << 4) + 16;
+            const wordArray = new Array(numberOfWordsTemp - 1).fill(0);
+            let i;
+            for (i = 0; i < length; i++) {
+                wordArray[i >> 2] |= utf8[i] << ((i % 4) * 8);
+            }
+            wordArray[i >> 2] |= 0x80 << ((i % 4) * 8);
+            wordArray[numberOfWordsTemp - 2] = length << 3;
+            wordArray[numberOfWordsTemp - 1] = length >>> 29;
+            return wordArray;
+        }
+
+        function addUnsigned(x, y) {
+            const x4 = x & 0x40000000;
+            const y4 = y & 0x40000000;
+            const x8 = x & 0x80000000;
+            const y8 = y & 0x80000000;
+            const result = (x & 0x3fffffff) + (y & 0x3fffffff);
+            if (x4 & y4) return result ^ 0x80000000 ^ x8 ^ y8;
+            if (x4 | y4) {
+                if (result & 0x40000000) return result ^ 0xc0000000 ^ x8 ^ y8;
+                return result ^ 0x40000000 ^ x8 ^ y8;
+            }
+            return result ^ x8 ^ y8;
+        }
+
+        function f(x, y, z) { return (x & y) | (~x & z); }
+        function g(x, y, z) { return (x & z) | (y & ~z); }
+        function h(x, y, z) { return x ^ y ^ z; }
+        function i(x, y, z) { return y ^ (x | ~z); }
+        function ff(a, b, c, d, x, s, ac) { return addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, f(b, c, d)), addUnsigned(x, ac)), s), b); }
+        function gg(a, b, c, d, x, s, ac) { return addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, g(b, c, d)), addUnsigned(x, ac)), s), b); }
+        function hh(a, b, c, d, x, s, ac) { return addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, h(b, c, d)), addUnsigned(x, ac)), s), b); }
+        function ii(a, b, c, d, x, s, ac) { return addUnsigned(rotateLeft(addUnsigned(addUnsigned(a, i(b, c, d)), addUnsigned(x, ac)), s), b); }
+
+        function wordToHex(value) {
+            let result = "";
+            for (let j = 0; j <= 3; j++) {
+                result += ((value >>> (j * 8)) & 255).toString(16).padStart(2, "0");
+            }
+            return result;
+        }
+
+        const x = toWordArray(input);
+        let a = 0x67452301;
+        let b = 0xefcdab89;
+        let c = 0x98badcfe;
+        let d = 0x10325476;
+
+        for (let k = 0; k < x.length; k += 16) {
+            const aa = a; const bb = b; const cc = c; const dd = d;
+            a = ff(a, b, c, d, x[k + 0], 7, 0xd76aa478); d = ff(d, a, b, c, x[k + 1], 12, 0xe8c7b756); c = ff(c, d, a, b, x[k + 2], 17, 0x242070db); b = ff(b, c, d, a, x[k + 3], 22, 0xc1bdceee);
+            a = ff(a, b, c, d, x[k + 4], 7, 0xf57c0faf); d = ff(d, a, b, c, x[k + 5], 12, 0x4787c62a); c = ff(c, d, a, b, x[k + 6], 17, 0xa8304613); b = ff(b, c, d, a, x[k + 7], 22, 0xfd469501);
+            a = ff(a, b, c, d, x[k + 8], 7, 0x698098d8); d = ff(d, a, b, c, x[k + 9], 12, 0x8b44f7af); c = ff(c, d, a, b, x[k + 10], 17, 0xffff5bb1); b = ff(b, c, d, a, x[k + 11], 22, 0x895cd7be);
+            a = ff(a, b, c, d, x[k + 12], 7, 0x6b901122); d = ff(d, a, b, c, x[k + 13], 12, 0xfd987193); c = ff(c, d, a, b, x[k + 14], 17, 0xa679438e); b = ff(b, c, d, a, x[k + 15], 22, 0x49b40821);
+            a = gg(a, b, c, d, x[k + 1], 5, 0xf61e2562); d = gg(d, a, b, c, x[k + 6], 9, 0xc040b340); c = gg(c, d, a, b, x[k + 11], 14, 0x265e5a51); b = gg(b, c, d, a, x[k + 0], 20, 0xe9b6c7aa);
+            a = gg(a, b, c, d, x[k + 5], 5, 0xd62f105d); d = gg(d, a, b, c, x[k + 10], 9, 0x02441453); c = gg(c, d, a, b, x[k + 15], 14, 0xd8a1e681); b = gg(b, c, d, a, x[k + 4], 20, 0xe7d3fbc8);
+            a = gg(a, b, c, d, x[k + 9], 5, 0x21e1cde6); d = gg(d, a, b, c, x[k + 14], 9, 0xc33707d6); c = gg(c, d, a, b, x[k + 3], 14, 0xf4d50d87); b = gg(b, c, d, a, x[k + 8], 20, 0x455a14ed);
+            a = gg(a, b, c, d, x[k + 13], 5, 0xa9e3e905); d = gg(d, a, b, c, x[k + 2], 9, 0xfcefa3f8); c = gg(c, d, a, b, x[k + 7], 14, 0x676f02d9); b = gg(b, c, d, a, x[k + 12], 20, 0x8d2a4c8a);
+            a = hh(a, b, c, d, x[k + 5], 4, 0xfffa3942); d = hh(d, a, b, c, x[k + 8], 11, 0x8771f681); c = hh(c, d, a, b, x[k + 11], 16, 0x6d9d6122); b = hh(b, c, d, a, x[k + 14], 23, 0xfde5380c);
+            a = hh(a, b, c, d, x[k + 1], 4, 0xa4beea44); d = hh(d, a, b, c, x[k + 4], 11, 0x4bdecfa9); c = hh(c, d, a, b, x[k + 7], 16, 0xf6bb4b60); b = hh(b, c, d, a, x[k + 10], 23, 0xbebfbc70);
+            a = hh(a, b, c, d, x[k + 13], 4, 0x289b7ec6); d = hh(d, a, b, c, x[k + 0], 11, 0xeaa127fa); c = hh(c, d, a, b, x[k + 3], 16, 0xd4ef3085); b = hh(b, c, d, a, x[k + 6], 23, 0x04881d05);
+            a = hh(a, b, c, d, x[k + 9], 4, 0xd9d4d039); d = hh(d, a, b, c, x[k + 12], 11, 0xe6db99e5); c = hh(c, d, a, b, x[k + 15], 16, 0x1fa27cf8); b = hh(b, c, d, a, x[k + 2], 23, 0xc4ac5665);
+            a = ii(a, b, c, d, x[k + 0], 6, 0xf4292244); d = ii(d, a, b, c, x[k + 7], 10, 0x432aff97); c = ii(c, d, a, b, x[k + 14], 15, 0xab9423a7); b = ii(b, c, d, a, x[k + 5], 21, 0xfc93a039);
+            a = ii(a, b, c, d, x[k + 12], 6, 0x655b59c3); d = ii(d, a, b, c, x[k + 3], 10, 0x8f0ccc92); c = ii(c, d, a, b, x[k + 10], 15, 0xffeff47d); b = ii(b, c, d, a, x[k + 1], 21, 0x85845dd1);
+            a = ii(a, b, c, d, x[k + 8], 6, 0x6fa87e4f); d = ii(d, a, b, c, x[k + 15], 10, 0xfe2ce6e0); c = ii(c, d, a, b, x[k + 6], 15, 0xa3014314); b = ii(b, c, d, a, x[k + 13], 21, 0x4e0811a1);
+            a = ii(a, b, c, d, x[k + 4], 6, 0xf7537e82); d = ii(d, a, b, c, x[k + 11], 10, 0xbd3af235); c = ii(c, d, a, b, x[k + 2], 15, 0x2ad7d2bb); b = ii(b, c, d, a, x[k + 9], 21, 0xeb86d391);
+            a = addUnsigned(a, aa); b = addUnsigned(b, bb); c = addUnsigned(c, cc); d = addUnsigned(d, dd);
+        }
+
+        return (wordToHex(a) + wordToHex(b) + wordToHex(c) + wordToHex(d)).toLowerCase();
+    }
+
+    async function hashPassword() {
+        const password = passwordInput.value;
+        if (!password) {
+            hashStatus.textContent = "Введите пароль.";
+            return;
+        }
+
+        try {
+            const hashHex = md5(password);
+            hashInput.value = hashHex;
+            maxLengthInput.value = password.length;
+            hashStatus.textContent = `MD5: ${hashHex}`;
+        } catch (error) {
+            hashStatus.textContent = `Не удалось посчитать MD5 в браузере: ${error}`;
+        }
+    }
 
     async function startCrack() {
-        const hash = document.getElementById('hash').value.trim();
-        const maxLength = document.getElementById('maxLength').value;
-        if (!hash) return alert('Enter hash!');
+        const hash = hashInput.value.trim();
+        const maxLength = Number(maxLengthInput.value);
+
+        if (!hash || !Number.isInteger(maxLength) || maxLength <= 0) {
+            startStatus.textContent = "Введите корректные hash и длину.";
+            return;
+        }
+
+        startStatus.textContent = "Отправка...";
 
         try {
-            const res = await fetch('/api/hash/crack', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hash, maxLength: parseInt(maxLength) })
+            const response = await fetch("/api/hash/crack", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ hash, maxLength })
             });
-            const data = await res.json();
-            addTaskRow(data.requestId, hash);
-            await pollStatus(data.requestId);
-        } catch (error) {
-            alert('Error: ' + error.message);
-        }
-    }
 
-    function addTaskRow(id, hash) {
-        const tbody = document.querySelector('#taskTable tbody');
-        const tr = document.createElement('tr');
-        tr.id = `row-${id}`;
-        tr.innerHTML = `
-            <td><small>${id.substring(0, 8)}...</small></td>
-            <td><small>${hash.substring(0, 8)}...</small></td>
-            <td class="status-QUEUED">QUEUED</td>
-            <td><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div></td>
-            <td>--</td>
-            <td>--</td>
-        `;
-        tbody.prepend(tr);
-        tasks.set(id, { row: tr });
-    }
-
-    async function pollStatus(id) {
-        if (!tasks.has(id)) return;
-        try {
-            const res = await fetch(`/api/hash/status?requestId=${id}`);
-            const data = await res.json();
-            updateRow(id, data);
-
-            // Продолжаем опрос только если задача ещё не завершена
-            if (data.status === 'IN_PROGRESS' || data.status === 'QUEUED') {
-                setTimeout(() => pollStatus(id), 1000);
+            if (!response.ok) {
+                const errorText = await response.text();
+                startStatus.textContent = `Ошибка: ${response.status} ${errorText}`;
+                return;
             }
-        } catch (e) {
-            console.error(e);
-            setTimeout(() => pollStatus(id), 2000);
+
+            const data = await response.json();
+            requestIdInput.value = data.requestId ?? "";
+            startStatus.textContent = `Задача создана. requestId: ${data.requestId}`;
+        } catch (error) {
+            startStatus.textContent = `Ошибка сети: ${error}`;
         }
     }
 
-    function updateRow(id, data) {
-        const { row } = tasks.get(id);
-        if (!row) return;
+    async function getStatus() {
+        const requestId = requestIdInput.value.trim();
+        if (!requestId) {
+            resultStatus.textContent = "Введите requestId.";
+            return;
+        }
 
-        const statusCell = row.cells[2];
-        statusCell.textContent = data.status;
-        statusCell.className = `status-${data.status}`;
+        resultStatus.textContent = "Запрос статуса...";
 
-        const progressFill = row.cells[3].querySelector('.progress-fill');
-        progressFill.style.width = `${data.progress || 0}%`;
+        try {
+            const response = await fetch(`/api/hash/status?requestId=${encodeURIComponent(requestId)}`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                resultStatus.textContent = `Ошибка: ${response.status} ${errorText}`;
+                return;
+            }
 
-        row.cells[4].textContent = data.estimatedTimeRemaining || '--';
-
-        if (data.status === 'READY') {
-            row.cells[5].textContent = data.data?.length > 0 ? data.data.join(', ') : 'Not found';
-            row.cells[5].style.color = data.data?.length > 0 ? '#27ae60' : '#e67e22';
+            const data = await response.json();
+            const words = Array.isArray(data.data) ? data.data.join(", ") : "-";
+            resultStatus.textContent = `status=${data.status}; data=${words}`;
+        } catch (error) {
+            resultStatus.textContent = `Ошибка сети: ${error}`;
         }
     }
+
+    hashButton.addEventListener("click", hashPassword);
+    startButton.addEventListener("click", startCrack);
+    statusButton.addEventListener("click", getStatus);
 </script>
 </body>
 </html>

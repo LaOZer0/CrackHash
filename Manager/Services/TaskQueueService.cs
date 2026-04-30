@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Manager.Models;
 using TaskStatus = Manager.Models.TaskStatus;
@@ -13,6 +14,7 @@ public class TaskQueueService : IHostedService, ITaskQueueService, IDisposable
     private readonly IStatePersistence _persistence;
     private readonly ILogger<TaskQueueService> _logger;
     
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> _taskCompletions = new();
     private CancellationTokenSource _stoppingCts = new();
     private Task _executingTask;
 
@@ -41,10 +43,8 @@ public class TaskQueueService : IHostedService, ITaskQueueService, IDisposable
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("TaskQueueService is starting.");
-        // Связываем токен остановки с токеном приложения
         _stoppingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         
-        // Запускаем фоновый цикл
         _executingTask = ExecuteAsync(_stoppingCts.Token);
         
         return _executingTask.IsCompleted ? _executingTask : Task.CompletedTask;
@@ -58,75 +58,77 @@ public class TaskQueueService : IHostedService, ITaskQueueService, IDisposable
 
         try
         {
-            // Сигнализируем о необходимости остановки
             _stoppingCts.Cancel();
         }
         finally
         {
-            // Ждем завершения текущей задачи
             await Task.WhenAny(_executingTask, Task.Delay(Timeout.Infinite, cancellationToken));
         }
     }
 
-    // Основной цикл обработки
     private async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await foreach (var task in _queue.Reader.ReadAllAsync(stoppingToken))
         {
+            if (stoppingToken.IsCancellationRequested) break;
+
             try
             {
-                if (stoppingToken.IsCancellationRequested) break;
-
                 _logger.LogInformation("Processing task {Id}...", task.RequestId);
+                
+                _tracker.Update(task.RequestId, s => { s.Status = TaskStatus.InProgress; s.StartedAt = DateTime.UtcNow; });
+                _ = _persistence.SaveStateAsync(_tracker.GetAllStates());
 
-                // 1. Обновляем статус
-                _tracker.Update(task.RequestId, s => 
-                {
-                    s.Status = TaskStatus.InProgress;
-                    s.StartedAt = DateTime.UtcNow;
-                });
-                await _persistence.SaveStateAsync(_tracker.GetAllStates());
-
-                // 2. Проверяем воркеров
                 var aliveWorkers = await _healthService.GetAliveWorkersAsync();
-                if (!aliveWorkers.Any())
-                    throw new InvalidOperationException("No alive workers available");
+                if (!aliveWorkers.Any()) throw new InvalidOperationException("No alive workers available");
 
-                // 3. Распределяем задачи
                 var alphabet = "abcdefghijklmnopqrstuvwxyz0123456789".ToCharArray();
                 _tracker.Update(task.RequestId, s => s.AssignedWorkerCount = aliveWorkers.Count);
+                _ = _persistence.SaveStateAsync(_tracker.GetAllStates());
                 
                 await _distributor.DistributeTasksAsync(task, aliveWorkers, alphabet);
                 
-                // 4. Ждем завершения всех частей
-                while (_tracker.Get(task.RequestId)?.CompletedParts.Count < aliveWorkers.Count 
-                       && !stoppingToken.IsCancellationRequested)
+                var tcs = new TaskCompletionSource();
+                _taskCompletions[task.RequestId] = tcs;
+                
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                timeoutCts.CancelAfter(TimeSpan.FromMinutes(10));
+                
+                try
                 {
-                    await Task.Delay(1000, stoppingToken);
-                    // Периодически сохраняем прогресс (опционально, можно реже)
-                    // await _persistence.SaveStateAsync(_tracker.GetAllStates()); 
+                    await tcs.Task.WaitAsync(timeoutCts.Token);
                 }
-
-                // 5. Финализация
-                _tracker.Update(task.RequestId, s => s.Status = TaskStatus.Ready);
-                await _persistence.SaveStateAsync(_tracker.GetAllStates());
-                _logger.LogInformation("Task {Id} completed successfully.", task.RequestId);
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    _tracker.Update(task.RequestId, s =>
+                    {
+                        var missing = s.AssignedWorkerCount - s.CompletedParts.Count - s.FailedParts;
+                        if (missing > 0) s.FailedParts += missing;
+                        
+                        if (s.Results.Count > 0) s.Status = TaskStatus.PartialReady;
+                        else s.Status = TaskStatus.Error;
+                    });
+                    _logger.LogWarning("Task {Id} timed out. Marked missing parts as failed.", task.RequestId);
+                }
+                
+                _ = _persistence.SaveStateAsync(_tracker.GetAllStates());
             }
-            catch (OperationCanceledException)
-            {
-                _logger.LogWarning("Task processing cancelled.");
-                break;
-            }
+            catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Task {Id} failed.", task.RequestId);
-                _tracker.Update(task.RequestId, s => 
-                {
-                    s.Status = TaskStatus.Error;
-                    s.ErrorMessage = ex.Message;
-                });
-                await _persistence.SaveStateAsync(_tracker.GetAllStates());
+                _tracker.Update(task.RequestId, s => { s.Status = TaskStatus.Error; s.ErrorMessage = ex.Message; });
+                _ = _persistence.SaveStateAsync(_tracker.GetAllStates());
             }
+            finally { _taskCompletions.TryRemove(task.RequestId, out _); }
+        }
+    }
+    
+    public void MarkTaskCompleted(string requestId)
+    {
+        if (_taskCompletions.TryRemove(requestId, out var tcs))
+        {
+            tcs.TrySetResult(); 
         }
     }
 

@@ -1,6 +1,6 @@
 namespace Manager.Models;
 
-public enum TaskStatus { Queued, InProgress, Ready, Error }
+public enum TaskStatus { Queued, InProgress, PartialReady, Ready, Error }
 
 public class RequestState
 {
@@ -10,13 +10,17 @@ public class RequestState
     public TaskStatus Status { get; set; }
     public int AssignedWorkerCount { get; set; }
     public HashSet<int> CompletedParts { get; set; } = new();
+    public int FailedParts { get; set; } = 0; 
     public List<string> Results { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? StartedAt { get; set; }
     public string? ErrorMessage { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string HashKey => $"{Hash.ToLowerInvariant()}:{MaxLength}";
+
     public int Progress => AssignedWorkerCount > 0 
-        ? (int)((double)CompletedParts.Count / AssignedWorkerCount * 100) 
+        ? (int)((double)(CompletedParts.Count + FailedParts) / AssignedWorkerCount * 100) 
         : 0;
 
     public string? EstimatedTimeRemaining
@@ -32,4 +36,7 @@ public class RequestState
             return TimeSpan.FromSeconds(remaining).ToString(@"mm\:ss");
         }
     }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasResult => Results.Count > 0;
 }

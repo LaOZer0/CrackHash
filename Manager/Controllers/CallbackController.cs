@@ -16,10 +16,7 @@ public class CallbackController : ControllerBase
     private readonly IStatePersistence _persistence;
     private readonly ILogger<CallbackController> _logger;
 
-    public CallbackController(
-        IRequestTracker tracker,
-        IStatePersistence persistence,
-        ILogger<CallbackController> logger)
+    public CallbackController(IRequestTracker tracker, IStatePersistence persistence, ILogger<CallbackController> logger)
     {
         _tracker = tracker;
         _persistence = persistence;
@@ -37,31 +34,46 @@ public class CallbackController : ControllerBase
         
         CrackHashWorkerResponse? response;
         using (var stringReader = new StringReader(xml))
-        {
             response = serializer.Deserialize(stringReader) as CrackHashWorkerResponse;
-        }
         
-        if (response == null)
-            return BadRequest("Invalid XML");
+        if (response == null) return BadRequest("Invalid XML");
         
-        _logger.LogInformation("Received response for request {RequestId}, part {PartNumber}, {Count} answers",
-            response.RequestId, response.PartNumber, response.Answers.Words.Count);
+        bool isFinished = false;
         
         _tracker.Update(response.RequestId, state =>
         {
             lock (state.Results)
             {
-                state.Results.AddRange(response.Answers.Words);
+                foreach (var word in response.Answers.Words)
+                    if (!state.Results.Contains(word)) state.Results.Add(word);
+                
                 state.CompletedParts.Add(response.PartNumber);
                 
-                if (state.CompletedParts.Count == state.AssignedWorkerCount)
+                bool allProcessed = state.CompletedParts.Count + state.FailedParts >= state.AssignedWorkerCount;
+                
+                if (state.Results.Count > 0)
                 {
-                    state.Status = TaskStatus.Ready;
+                    state.Status = allProcessed ? TaskStatus.Ready : TaskStatus.PartialReady;
                 }
+                else if (allProcessed)
+                {
+                    state.Status = TaskStatus.Error;
+                }
+                
+                isFinished = allProcessed;
             }
         });
+
+        _ = _persistence.SaveStateAsync(_tracker.GetAllStates());
         
-        await _persistence.SaveStateAsync(_tracker.GetAllStates());
+        if (isFinished)
+        {
+            _logger.LogInformation("Task {RequestId} finished with status {Status}", 
+                response.RequestId, _tracker.Get(response.RequestId)?.Status);
+            
+            if (HttpContext.RequestServices.GetRequiredService<ITaskQueueService>() is TaskQueueService tqs)
+                tqs.MarkTaskCompleted(response.RequestId);
+        }
         
         return Ok();
     }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Manager.Models;
+using TaskStatus = Manager.Models.TaskStatus;
 
 namespace Manager.Services;
 
@@ -24,7 +25,17 @@ public class StatePersistenceService : IStatePersistence
         await _lock.WaitAsync();
         try
         {
-            var json = JsonSerializer.Serialize(states.ToList(), _options);
+            var deduplicated = states
+                .GroupBy(s => s.HashKey)
+                .Select(group =>
+                {
+                    var priorityOrder = new[] { TaskStatus.Ready, TaskStatus.Error, TaskStatus.InProgress, TaskStatus.Queued };
+                    
+                    return group.OrderByDescending(s => Array.IndexOf(priorityOrder, s.Status)).First();
+                })
+                .ToList();
+
+            var json = JsonSerializer.Serialize(deduplicated, _options);
             await File.WriteAllTextAsync(_filePath, json);
         }
         finally 
@@ -35,14 +46,22 @@ public class StatePersistenceService : IStatePersistence
 
     public async Task<List<RequestState>> LoadStateAsync()
     {
-        if (!File.Exists(_filePath)) 
-            return new();
-            
+        if (!File.Exists(_filePath)) return new();
+        
         await _lock.WaitAsync();
         try
         {
             var json = await File.ReadAllTextAsync(_filePath);
-            return JsonSerializer.Deserialize<List<RequestState>>(json, _options) ?? new();
+            var states = JsonSerializer.Deserialize<List<RequestState>>(json, _options) ?? new();
+            
+            return states
+                .GroupBy(s => s.HashKey)
+                .Select(group =>
+                {
+                    var priorityOrder = new[] { TaskStatus.Ready, TaskStatus.Error, TaskStatus.InProgress, TaskStatus.Queued };
+                    return group.OrderByDescending(s => Array.IndexOf(priorityOrder, s.Status)).First();
+                })
+                .ToList();
         }
         finally 
         { 

@@ -21,8 +21,9 @@ public class HashCracker : IHashCracker
         var partSize = totalCombinations / task.PartCount;
         var remainder = totalCombinations % task.PartCount;
             
-        var startIndex = (task.PartNumber - 1) * partSize + Math.Min(task.PartNumber - 1, remainder);
-        var endIndex = startIndex + partSize + (task.PartNumber <= remainder ? 1 : 0) - 1;
+        //Исправить формулу
+        var startIndex = (task.PartNumber - 1) * partSize;
+        var endIndex = startIndex + partSize + (task.PartNumber == task.PartCount ? remainder : 0) - 1;
             
         _logger.LogInformation("Worker {PartNumber}: processing indices {Start}-{End} of {Total}",
             task.PartNumber, startIndex, endIndex, totalCombinations);

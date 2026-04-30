@@ -27,19 +27,32 @@ public class HashController : ControllerBase
     [HttpPost("crack")]
     public async Task<ActionResult<CrackResponse>> CrackHash([FromBody] CrackRequest request)
     {
+        var hash = request.Hash.ToLowerInvariant();
+        var hashKey = $"{hash}:{request.MaxLength}";
+        RequestState existingState;
+
+        if (_tracker.TryGetCachedResult(hash, request.MaxLength, out var cachedResult))
+        {
+            _logger.LogInformation("Cache hit for hash {HashKey}", hashKey);
+            
+            existingState = _tracker.GetByHashKey(hashKey)!;
+            return Ok(new CrackResponse { RequestId = existingState.RequestId });
+        }
+
         var state = new RequestState
         {
             RequestId = Guid.NewGuid().ToString(),
-            Hash = request.Hash,
+            Hash = hash,
             MaxLength = request.MaxLength,
-            Status = TaskStatus.InProgress
+            Status = TaskStatus.Queued
         };
-            
+        
         _tracker.Add(state);
         await _queueService.EnqueueAsync(state);
-            
-        _logger.LogInformation("New crack request: {RequestId}", state.RequestId);
-            
+        
+        _logger.LogInformation(" New crack request: {RequestId} for hash {HashKey}", 
+            state.RequestId, hashKey);
+        
         return Ok(new CrackResponse { RequestId = state.RequestId });
     }
 
@@ -55,7 +68,7 @@ public class HashController : ControllerBase
             Status = state.Status.ToString().ToUpper(),
             Progress = state.Progress,
             EstimatedTimeRemaining = state.EstimatedTimeRemaining,
-            Data = state.Status == TaskStatus.Ready ? state.Results : null
+            Data = state.Results
         });
     }
 }
